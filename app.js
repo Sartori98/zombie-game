@@ -26,7 +26,7 @@ const GAME_COLLECTION_NAME = 'rpg_apocalipse_zumbi_shared';
 const GAME_DOC_ID = 'partida_lucas_lavinia';
 
 // Caminho completo para o documento do jogo no Firestore.
-const firestoreGameDocPath = `/artifacts/${appId}/public/data/${GAME_COLLECTION_NAME}/${GAME_DOC_ID}`;
+const firestoreGameDocPath = `/artifacts/rpg-zumbi-default-app/public/doc_para_public/data/doc_para_data/rpg_apocalipse_zumbi_shared/partida_lucas_lavinia}`;
 
 // --- Inicialização do Firebase ---
 let app;
