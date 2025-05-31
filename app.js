@@ -1,4 +1,3 @@
-</markdown>
 ```javascript
 // --- Configuração do Firebase ---
 // !!! IMPORTANTE: SUBSTITUA ESTE BLOCO PELO SEU firebaseConfig REAL !!!
