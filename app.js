@@ -1,24 +1,9 @@
-<markdown>
-### Arquivo `app.js`
-
-Aqui está o conteúdo para o seu arquivo `app.js`.
-
-**Como "baixar":**
-
-1.  Clique no botão "Copiar" que aparece no canto superior direito desta caixa de código para copiar todo o conteúdo.
-2.  Abra um editor de texto simples no seu computador (como Bloco de Notas, TextEdit em modo texto simples, VS Code, etc.).
-3.  Cole o código copiado no editor.
-4.  Guarde o ficheiro com o nome `app.js` **na mesma pasta** onde guardou o `index.html`.
-
-**Lembretes importantes para este ficheiro:**
-* **Configuração do Firebase:** Terá de colar o objeto `firebaseConfig` do seu projeto Firebase no local indicado no código.
-* **Estrutura de Dados no Firestore:** Este `app.js` espera que os dados do ato (história, cenas, escolhas) estejam numa estrutura específica dentro do seu documento no Firestore, como discutimos anteriormente (no campo `act_data`).
-
 </markdown>
 ```javascript
 // --- Configuração do Firebase ---
-// Cole aqui o objeto firebaseConfig que você copiou do console do Firebase:
-// Exemplo:
+// !!! IMPORTANTE: SUBSTITUA ESTE BLOCO PELO SEU firebaseConfig REAL !!!
+// Obtenha o seu firebaseConfig no console do Firebase:
+// Configurações do Projeto > Seus apps > Configuração do SDK (selecione "CDN")
 const firebaseConfig = {
   apiKey: "AIzaSyCXsrrRfgsN3Y0uh_dWp8dxNK9s5Fxx1Bo",
   authDomain: "zombie-game-efb3e.firebaseapp.com",
@@ -27,14 +12,21 @@ const firebaseConfig = {
   messagingSenderId: "210412539983",
   appId: "1:210412539983:web:c800e02d20c28fe1ea1a3a"
 };
+// !!! FIM DO BLOCO A SUBSTITUIR !!!
+
 
 // --- Constantes Globais ---
-// O __app_id é fornecido pelo ambiente Canvas. Use um padrão se não estiver definido.
+// O __app_id é fornecido por alguns ambientes de execução (como o Canvas do Gemini).
+// Se não estiver definido, usamos um valor padrão. Este valor DEVE corresponder
+// ao ID do documento que criou dentro da coleção "artifacts" no Firestore.
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'rpg-zumbi-default-app';
-const GAME_COLLECTION_NAME = 'rpg_apocalipse_zumbi_shared'; // Nome da coleção no Firestore
-const GAME_DOC_ID = 'partida_lucas_lavinia'; // ID do documento do jogo
 
-// Caminho do documento no Firestore (público para este app)
+// Nomes da coleção e do documento no Firestore.
+// Estes DEVEM corresponder exatamente aos nomes que usou no seu banco de dados Firestore.
+const GAME_COLLECTION_NAME = 'rpg_apocalipse_zumbi_shared';
+const GAME_DOC_ID = 'partida_lucas_lavinia';
+
+// Caminho completo para o documento do jogo no Firestore.
 const firestoreGameDocPath = `/artifacts/${appId}/public/data/${GAME_COLLECTION_NAME}/${GAME_DOC_ID}`;
 
 // --- Inicialização do Firebase ---
@@ -43,7 +35,7 @@ let auth;
 let db;
 let userId = null; // Será definido após a autenticação
 
-// --- Elementos da UI (definidos no index.html) ---
+// --- Elementos da UI (IDs DEVEM corresponder aos do index.html) ---
 const storyTextElement = document.getElementById('story-text');
 const choicesAreaElement = document.getElementById('choices-area');
 const chosenFeedbackElement = document.getElementById('chosen-feedback');
@@ -55,10 +47,10 @@ const userIdDisplayElement = document.getElementById('user-id-display');
 const errorMessageElement = document.getElementById('error-message');
 
 // --- Estado do Jogo Local ---
-let currentActData = null; // Armazenará os dados do ato carregado
+let currentActData = null; // Armazenará os dados do ato carregado do Firestore
 let currentSceneId = null; // ID da cena atual que está sendo exibida
 
-// --- Funções Auxiliares ---
+// --- Funções Auxiliares de UI ---
 function showLoading(message = "A carregar...") {
     if (loadingIndicator) {
         const pElement = loadingIndicator.querySelector('p');
@@ -79,8 +71,7 @@ function displayError(message) {
         errorMessageElement.textContent = message;
         errorMessageElement.classList.remove('hidden');
     }
-    console.error(message);
-    // Opcional: esconder o loading se já não estiver escondido
+    console.error("RPG Error:", message);
     if (loadingIndicator && !loadingIndicator.classList.contains('hidden')) {
         loadingIndicator.classList.add('hidden');
     }
@@ -97,175 +88,133 @@ function clearError() {
 
 async function initializeAppAndAuth() {
     try {
-        if (!firebaseConfig || Object.keys(firebaseConfig).length === 0 || !firebaseConfig.apiKey) {
-            console.error("Configuração do Firebase (__firebase_config) está vazia ou incompleta:", firebaseConfig);
-            throw new Error("Configuração do Firebase (__firebase_config) não encontrada ou incompleta. Verifique as variáveis de ambiente da plataforma.");
+        // Verifica se firebaseConfig foi preenchido
+        if (!firebaseConfig || !firebaseConfig.apiKey || firebaseConfig.apiKey === "COLE_AQUI_SUA_API_KEY") {
+            throw new Error("Configuração do Firebase (firebaseConfig) não foi preenchida ou é inválida. Verifique o app.js.");
         }
         app = firebase.initializeApp(firebaseConfig);
         auth = firebase.auth();
         db = firebase.firestore();
-        firebase.firestore().setLogLevel('debug'); // 'debug' ou 'error' para logs do Firestore
+        firebase.firestore().setLogLevel('error'); // 'debug' para mais logs, 'error' para menos
 
-        authStatusElement.textContent = "A autenticar...";
+        if(authStatusElement) authStatusElement.textContent = "A autenticar...";
 
         auth.onAuthStateChanged(async (user) => {
             if (user) {
                 userId = user.uid;
-                authStatusElement.textContent = "Autenticado";
-                userIdTextElement.textContent = userId;
-                userIdDisplayElement.classList.remove('hidden');
+                if(authStatusElement) authStatusElement.textContent = "Autenticado";
+                if(userIdTextElement) userIdTextElement.textContent = userId.substring(0, 8) + "...";
+                if(userIdDisplayElement) userIdDisplayElement.classList.remove('hidden');
                 console.log("Utilizador autenticado:", userId);
-                listenToGameState(); // Começa a ouvir o estado do jogo após autenticação bem-sucedida
+                listenToGameState();
             } else {
-                // Se não houver utilizador, tenta login anónimo se não houver token customizado
-                userId = crypto.randomUUID(); // Gera um ID temporário para UI antes do login
-                authStatusElement.textContent = "Autenticação anónima";
-                userIdTextElement.textContent = `${userId.substring(0,8)}... (Anónimo)`;
-                userIdDisplayElement.classList.remove('hidden'); // Mostra o ID anónimo temporário
-                console.log("Nenhum utilizador atual. ID anónimo temporário:", userId);
-
-                if (typeof __initial_auth_token === 'undefined' || !__initial_auth_token) {
-                    console.log("A tentar login anónimo...");
-                    try {
-                        const anonUserCredential = await auth.signInAnonymously();
-                        // onAuthStateChanged será chamado novamente com o utilizador anónimo real
-                        console.log("Login anónimo bem-sucedido:", anonUserCredential.user.uid);
-                    } catch (error) {
-                        console.error("Erro no login anónimo:", error);
-                        displayError(`Erro no login anónimo: ${error.message}. Recarregue a página.`);
-                        authStatusElement.textContent = "Falha na autenticação";
-                    }
-                } else {
-                    // Se __initial_auth_token estava definido mas falhou, onAuthStateChanged já teria sido chamado
-                    // Se chegou aqui, é porque o token não estava definido e o login anónimo já foi tentado (ou será)
-                    // Se o login anónimo falhar, o estado de "Falha na autenticação" persistirá.
-                    // Se as regras do Firestore permitirem acesso não autenticado (não recomendado), poderia chamar listenToGameState aqui.
-                    // Mas com as regras atuais, é preciso um utilizador (anónimo ou real).
+                userId = "anon_" + crypto.randomUUID().substring(0,12); // ID anónimo temporário
+                if(authStatusElement) authStatusElement.textContent = "A tentar login anónimo...";
+                if(userIdTextElement) userIdTextElement.textContent = `Anónimo (${userId.substring(5,10)}...)`;
+                if(userIdDisplayElement) userIdDisplayElement.classList.remove('hidden');
+                console.log("Nenhum utilizador. Tentando login anónimo. ID provisório:", userId);
+                try {
+                    const anonUserCredential = await auth.signInAnonymously();
+                    // onAuthStateChanged será chamado novamente com o utilizador anónimo real
+                    console.log("Login anónimo bem-sucedido:", anonUserCredential.user.uid);
+                } catch (error) {
+                    console.error("Erro no login anónimo:", error);
+                    displayError(`Erro no login anónimo: ${error.message}. Verifique as regras de segurança e se a autenticação anónima está ativa no Firebase.`);
+                    if(authStatusElement) authStatusElement.textContent = "Falha na autenticação";
                 }
             }
         });
 
-        // Tenta login com token customizado se disponível
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-            console.log("A tentar login com token customizado...");
-            try {
-                await auth.signInWithCustomToken(__initial_auth_token);
-                // onAuthStateChanged será chamado se bem-sucedido
-            } catch (error) {
-                console.error("Erro no login com token customizado:", error);
-                // Se falhar, onAuthStateChanged pode tentar login anónimo (se __initial_auth_token não estiver definido)
-                // ou mostrar erro se o token era a única opção.
-                displayError(`Erro com token: ${error.message}. A tentar login anónimo se configurado.`);
-                // O onAuthStateChanged já lida com o fallback para anónimo se __initial_auth_token não estiver definido
-            }
-        } else if (!auth.currentUser) { // Se não há token e nem utilizador atual, força tentativa de anónimo
-             console.log("Nenhum token customizado e nenhum utilizador atual, a tentar login anónimo...");
-             try {
-                await auth.signInAnonymously();
-             } catch (error) {
-                console.error("Erro ao tentar login anónimo inicial:", error);
-                displayError(`Falha crítica na autenticação: ${error.message}.`);
-                authStatusElement.textContent = "Falha crítica na autenticação";
-             }
-        }
-
+        // Não é necessário chamar signInWithCustomToken ou signInAnonymously aqui explicitamente
+        // se o onAuthStateChanged já lida com a lógica de "nenhum utilizador".
+        // A menos que __initial_auth_token seja um requisito específico da plataforma.
 
     } catch (error) {
         console.error("Erro ao inicializar Firebase:", error);
-        displayError(`Erro crítico na inicialização: ${error.message}. Verifique a configuração do Firebase.`);
-        authStatusElement.textContent = "Erro de Inicialização";
+        displayError(`Erro crítico na inicialização: ${error.message}.`);
+        if(authStatusElement) authStatusElement.textContent = "Erro de Inicialização";
     }
 }
 
-
-// Ouve o documento principal do jogo para carregar o ato e a cena atual
 function listenToGameState() {
     if (!db) {
         displayError("Base de dados não inicializada.");
         return;
     }
-    if (!userId && !auth.currentUser) { // Verifica se userId está definido ou se há um utilizador autenticado
+    // userId deve ser definido pelo onAuthStateChanged antes desta função ser chamada com sucesso.
+    if (!userId && !auth.currentUser) {
         displayError("Utilizador não autenticado. A aguardar autenticação.");
-        // Poderia tentar autenticar novamente ou pedir ao utilizador para recarregar.
         return;
     }
     // Garante que userId é o uid do utilizador autenticado, se houver
     if (auth.currentUser && userId !== auth.currentUser.uid) {
         userId = auth.currentUser.uid;
-        userIdTextElement.textContent = userId;
+         if(userIdTextElement) userIdTextElement.textContent = userId.substring(0, 8) + "...";
     }
 
-
-    showLoading("A carregar dados do jogo...");
+    showLoading("A carregar dados do jogo do Firestore...");
     const gameDocRef = db.doc(firestoreGameDocPath);
 
     gameDocRef.onSnapshot((doc) => {
         clearError();
         if (doc.exists) {
             const gameState = doc.data();
-            console.log("Estado do jogo recebido:", gameState);
+            console.log("Estado do jogo recebido do Firestore:", gameState);
 
-            // Carrega os dados do ato
             if (gameState.act_data && typeof gameState.act_data === 'object') {
                 currentActData = gameState.act_data;
             } else {
-                displayError("Dados do Ato (act_data) não encontrados ou em formato incorreto no Firestore. Verifique a estrutura em: " + firestoreGameDocPath);
+                displayError(`Dados do Ato (act_data) não encontrados ou em formato incorreto no Firestore. Verifique o documento em: ${firestoreGameDocPath}`);
                 currentActData = null;
-                hideLoading(); // Esconde o loading porque não há dados para mostrar
-                return; // Interrompe se não há dados do ato
+                hideLoading();
+                return;
             }
             
-            // Define a cena atual
-            // Se currentSceneId não estiver no gameState, usa a cenaInicialId do ato
-            // Se cenaInicialId também não existir, usa a primeira cena listada em act_data.cenas
             let newSceneId = gameState.currentSceneId;
             if (!newSceneId && currentActData) {
                 newSceneId = currentActData.cenaInicialId;
                 if (!newSceneId && currentActData.cenas && Object.keys(currentActData.cenas).length > 0) {
-                    newSceneId = Object.keys(currentActData.cenas)[0]; // Fallback para a primeira cena
-                    console.warn("currentSceneId e cenaInicialId não definidos. A usar a primeira cena do ato:", newSceneId);
+                    newSceneId = Object.keys(currentActData.cenas)[0];
+                    console.warn("currentSceneId e cenaInicialId não definidos no Firestore. A usar a primeira cena do ato:", newSceneId);
                 }
             }
 
             if (!newSceneId) {
-                displayError("Não foi possível determinar a cena atual. Verifique currentSceneId e act_data.cenaInicialId no Firestore.");
+                displayError("Não foi possível determinar a cena atual. Verifique 'currentSceneId' e 'act_data.cenaInicialId' no Firestore.");
                 hideLoading();
                 return;
             }
 
-            // Atualiza a cena apenas se mudou ou se o conteúdo do jogo estava escondido
             if (newSceneId !== currentSceneId || gameContent.classList.contains('hidden')) {
                  currentSceneId = newSceneId;
                  displayScene(currentSceneId);
             }
             
-            // Feedback da última escolha
             if (gameState.lastChoiceText) {
-                const timestamp = gameState.lastUpdateTimestamp?.toDate ? new Date(gameState.lastUpdateTimestamp.toDate()).toLocaleTimeString() : 'recentemente';
-                const chooser = gameState.lastChosenByUserId ? gameState.lastChosenByUserId.substring(0,8)+'...' : 'alguém';
-                chosenFeedbackElement.textContent = `Última escolha: "${gameState.lastChoiceText}" (por ${chooser}) às ${timestamp}`;
+                const timestamp = gameState.lastUpdateTimestamp?.toDate ? new Date(gameState.lastUpdateTimestamp.toDate()).toLocaleTimeString('pt-PT') : 'recentemente';
+                const chooser = gameState.lastChosenByUserId ? (gameState.lastChosenByUserId.startsWith("anon_")? "Anónimo" : gameState.lastChosenByUserId.substring(0,8)+'...') : 'alguém';
+                if(chosenFeedbackElement) chosenFeedbackElement.textContent = `Última escolha: "${gameState.lastChoiceText}" (por ${chooser}) às ${timestamp}`;
             } else {
-                chosenFeedbackElement.textContent = 'O jogo começou! Façam a vossa primeira escolha.';
+                if(chosenFeedbackElement) chosenFeedbackElement.textContent = 'O jogo começou! Façam a vossa primeira escolha.';
             }
-            // hideLoading() é chamado dentro de displayScene ou em caso de erro
+            // hideLoading() é chamado dentro de displayScene
 
         } else {
-            displayError(`Documento do jogo não encontrado em: ${firestoreGameDocPath}. Peça ao Mestre para o configurar com 'act_data' e 'currentSceneId'.`);
-            currentActData = null; // Limpa os dados do ato se o documento não existe
+            displayError(`Documento do jogo não encontrado em: ${firestoreGameDocPath}. Verifique se o caminho está correto e se o documento existe, contendo os campos 'act_data' e 'currentSceneId'.`);
+            currentActData = null;
             hideLoading();
         }
     }, (error) => {
-        console.error("Erro ao buscar estado do jogo: ", error);
-        displayError(`Erro ao carregar estado do jogo: ${error.message}. Verifique a ligação e as regras do Firestore.`);
+        console.error("Erro ao escutar estado do jogo (onSnapshot): ", error);
+        displayError(`Erro ao carregar estado do jogo: ${error.message}. Verifique a ligação à internet e as regras de segurança do Firestore.`);
         currentActData = null;
         hideLoading();
     });
 }
 
-// Exibe uma cena específica com base no ID
 function displayScene(sceneId) {
     if (!currentActData || !currentActData.cenas || !currentActData.cenas[sceneId]) {
-        displayError(`Cena "${sceneId}" não encontrada nos dados do ato (act_data.cenas). Verifique a estrutura no Firestore.`);
+        displayError(`Cena "${sceneId}" não encontrada nos dados do ato (act_data.cenas). Verifique a estrutura JSON no Firestore.`);
         if(storyTextElement) storyTextElement.textContent = `Erro: Cena ${sceneId} não encontrada.`;
         if(choicesAreaElement) choicesAreaElement.innerHTML = '';
         hideLoading();
@@ -274,23 +223,21 @@ function displayScene(sceneId) {
 
     const scene = currentActData.cenas[sceneId];
     if(storyTextElement) {
-        // Usar textContent para segurança por defeito. Se precisar de HTML, certifique-se que é sanitizado.
         storyTextElement.textContent = scene.descricao; 
     }
     
-    if(choicesAreaElement) choicesAreaElement.innerHTML = ''; // Limpa escolhas antigas
+    if(choicesAreaElement) choicesAreaElement.innerHTML = '';
 
     if (scene.finalDoAto) {
         const endMessage = document.createElement('p');
-        endMessage.className = "text-center text-xl font-semibold my-4";
+        endMessage.className = "text-center text-xl font-semibold my-4"; // Tailwind classes
         endMessage.textContent = scene.gameOver ? "Fim de Jogo!" : "Fim do Ato!";
         if(choicesAreaElement) choicesAreaElement.appendChild(endMessage);
         
-        // Botão para reiniciar (se for fim de jogo ou fim de ato e quisermos essa opção)
-        if (scene.gameOver || scene.finalDoAto) { // Adicionado scene.finalDoAto para reiniciar no fim do ato também
+        if (scene.gameOver || scene.finalDoAto) {
             const restartButton = document.createElement('button');
-            restartButton.textContent = "Reiniciar Ato (Voltar à cena inicial)";
-            restartButton.className = "choice-button w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-75 mt-4";
+            restartButton.textContent = "Reiniciar Ato";
+            restartButton.className = "choice-button w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-75 mt-4"; // Tailwind classes
             restartButton.onclick = () => resetToActStart();
             if(choicesAreaElement) choicesAreaElement.appendChild(restartButton);
         }
@@ -300,7 +247,7 @@ function displayScene(sceneId) {
             if (choice && typeof choice.texto === 'string' && typeof choice.proximaCenaId === 'string') {
                 const button = document.createElement('button');
                 button.textContent = choice.texto;
-                button.className = "choice-button w-full bg-red-500 hover:bg-red-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-opacity-75";
+                button.className = "choice-button w-full bg-red-500 hover:bg-red-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-opacity-75"; // Tailwind classes
                 button.onclick = () => selectChoice(choice);
                 if(choicesAreaElement) choicesAreaElement.appendChild(button);
             } else {
@@ -308,77 +255,68 @@ function displayScene(sceneId) {
             }
         });
     } else {
-        // Cena sem escolhas e que não é final
-        if(choicesAreaElement) choicesAreaElement.innerHTML = '<p class="text-center text-gray-500">Não há mais ações possíveis aqui. O Mestre precisa de continuar a história ou esta é uma cena de transição.</p>';
+        if(choicesAreaElement) choicesAreaElement.innerHTML = '<p class="text-center text-gray-500">Não há mais ações possíveis aqui.</p>';
     }
-    hideLoading(); // Garante que o conteúdo do jogo seja exibido após o processamento da cena
+    hideLoading();
 }
 
-// Função para quando uma escolha é selecionada
 async function selectChoice(choice) {
     if (!db) {
-        displayError("Base de dados não inicializada. Não é possível registar a escolha.");
+        displayError("Base de dados não inicializada.");
         return;
     }
-    if (!userId && !auth.currentUser) {
+    let currentUserId = auth.currentUser ? auth.currentUser.uid : userId; // Garante que temos o ID mais atualizado
+    if (!currentUserId) {
         displayError("Utilizador não autenticado. Não é possível registar a escolha.");
         return;
     }
-     // Garante que userId é o uid do utilizador autenticado
-    if (auth.currentUser && userId !== auth.currentUser.uid) {
-        userId = auth.currentUser.uid;
-    }
-
 
     if (!choice.proximaCenaId) {
-        displayError("Escolha inválida: 'proximaCenaId' não definido na estrutura da escolha.");
+        displayError("Escolha inválida: 'proximaCenaId' não definido.");
         return;
     }
 
-    console.log(`Utilizador ${userId} escolheu: "${choice.texto}", indo para cena: ${choice.proximaCenaId}`);
-    showLoading(`A ir para a próxima cena...`);
-
+    console.log(`Utilizador ${currentUserId} escolheu: "${choice.texto}", indo para cena: ${choice.proximaCenaId}`);
+    showLoading(`A processar escolha...`);
 
     const gameDocRef = db.doc(firestoreGameDocPath);
     try {
-        // Atualiza o Firestore com a nova cena atual e a última escolha feita.
-        // O onSnapshot cuidará de chamar displayScene com a nova currentSceneId.
         await gameDocRef.update({
             currentSceneId: choice.proximaCenaId,
             lastChoiceText: choice.texto,
-            lastChosenByUserId: userId, // Registra quem fez a escolha
+            lastChosenByUserId: currentUserId,
             lastUpdateTimestamp: firebase.firestore.FieldValue.serverTimestamp()
         });
         console.log("Escolha e próxima cena atualizadas no Firestore.");
-        // O display da nova cena será feito pelo listener `onSnapshot` quando `currentSceneId` mudar.
+        // O onSnapshot tratará de atualizar a UI com a nova cena.
     } catch (error) {
         console.error("Erro ao atualizar Firestore com a escolha: ", error);
         displayError(`Erro ao registar escolha: ${error.message}`);
-        hideLoading(); // Esconde o loading se houver erro
+        hideLoading();
     }
 }
 
-// Função para reiniciar o ato para a cena inicial
 async function resetToActStart() {
     if (!db) {
-        displayError("Base de dados não inicializada. Não é possível reiniciar.");
+        displayError("Base de dados não inicializada.");
         return;
     }
     if (!currentActData || !currentActData.cenaInicialId) {
-        displayError("Não foi possível reiniciar: dados do ato ou cena inicial não definidos. Verifique 'act_data.cenaInicialId'.");
+        displayError("Não foi possível reiniciar: dados do ato ou cena inicial não definidos.");
         return;
     }
+    let currentUserId = auth.currentUser ? auth.currentUser.uid : userId;
+
     showLoading("A reiniciar o ato...");
     const gameDocRef = db.doc(firestoreGameDocPath);
     try {
         await gameDocRef.update({
             currentSceneId: currentActData.cenaInicialId,
             lastChoiceText: "Ato reiniciado.",
-            lastChosenByUserId: "Sistema", // Ou pode ser o userId atual
+            lastChosenByUserId: currentUserId || "Sistema",
             lastUpdateTimestamp: firebase.firestore.FieldValue.serverTimestamp()
         });
         console.log("Ato reiniciado para a cena:", currentActData.cenaInicialId);
-        // O onSnapshot tratará de recarregar a cena.
     } catch (error) {
         console.error("Erro ao reiniciar o ato:", error);
         displayError(`Erro ao reiniciar: ${error.message}`);
@@ -386,72 +324,32 @@ async function resetToActStart() {
     }
 }
 
-
-// --- Inicialização ---
-// Garante que o DOM está carregado antes de tentar manipular elementos
+// --- Inicialização da Aplicação ---
 document.addEventListener('DOMContentLoaded', () => {
+    // Verifica se os elementos HTML essenciais existem
+    if (!storyTextElement || !choicesAreaElement || !loadingIndicator || !gameContent) {
+        console.error("Um ou mais elementos HTML essenciais não foram encontrados no DOM. Verifique os IDs no index.html.");
+        // Poderia mostrar um erro visual para o utilizador aqui, se apropriado
+        const body = document.querySelector('body');
+        if (body) {
+            body.innerHTML = '<p style="color:red; text-align:center; margin-top: 50px;">Erro crítico: Elementos da página não encontrados. Verifique o HTML.</p>';
+        }
+        return;
+    }
+
+    // Verifica se o SDK do Firebase está carregado
     if (typeof firebase === 'undefined' || typeof firebase.initializeApp === 'undefined') {
-        displayError("SDK do Firebase não carregado corretamente. Verifique os links <script> no HTML.");
-        // Oculta o spinner de loading principal se o Firebase não carregar
+        displayError("SDK do Firebase não carregado corretamente. Verifique os links <script> no index.html.");
         if(loadingIndicator) loadingIndicator.classList.add('hidden');
-        if(gameContent) gameContent.innerHTML = '<p class="text-red-500 text-center">Erro crítico: Firebase não carregado.</p>';
-        if(gameContent) gameContent.classList.remove('hidden');
+        if(gameContent && !gameContent.querySelector('p.text-red-500')) { // Evita duplicar msg de erro
+             const errorP = document.createElement('p');
+             errorP.className = "text-red-500 text-center"; // Tailwind classes
+             errorP.textContent = "Erro crítico: Firebase SDK não carregado.";
+             gameContent.innerHTML = ''; // Limpa conteúdo anterior
+             gameContent.appendChild(errorP);
+             gameContent.classList.remove('hidden');
+        }
         return;
     }
     initializeAppAndAuth();
 });
-
-// ----- DADOS INICIAIS E ESTRUTURA ESPERADA NO FIRESTORE -----
-// O "Mestre" (vocês) precisará criar/configurar o documento no Firestore
-// em: /artifacts/{appId}/public/data/rpg_apocalipse_zumbi_shared/partida_lucas_lavinia
-//
-// O documento 'partida_lucas_lavinia' deve ter os seguintes campos:
-//
-// 1. act_data (Map): Contém toda a estrutura do ato atual. Exemplo:
-//    {
-//      "atoId": "ato1_exemplo_despertar",
-//      "titulo": "O Despertar no Porão",
-//      "cenaInicialId": "cena1_porao",
-//      "cenas": {
-//        "cena1_porao": {
-//          "descricao": "Texto da cena 1...",
-//          "escolhas": [
-//            { "texto": "Escolha A", "proximaCenaId": "cena2_resultado_A" },
-//            { "texto": "Escolha B", "proximaCenaId": "cena3_resultado_B" }
-//          ]
-//        },
-//        "cena2_resultado_A": {
-//          "descricao": "Texto da cena 2...",
-//          "escolhas": [...] 
-//        },
-//        "fim_ato_vitoria": {
-//            "descricao": "Vocês venceram o Ato 1!",
-//            "finalDoAto": true,
-//            "gameOver": false 
-//        },
-//        "fim_jogo_derrota": {
-//            "descricao": "Fim de jogo...",
-//            "finalDoAto": true, // Pode ser fim de ato e fim de jogo
-//            "gameOver": true
-//        }
-//        // ... mais cenas
-//      }
-//    }
-//
-// 2. currentSceneId (String): O ID da cena atual a ser exibida.
-//    Ex: "cena1_porao"
-//
-// 3. lastChoiceText (String): Texto da última escolha feita (opcional, para feedback).
-//    Ex: "Investigar os barulhos"
-//
-// 4. lastChosenByUserId (String): UID do utilizador que fez a última escolha (opcional).
-//
-// 5. lastUpdateTimestamp (Timestamp): Timestamp da última atualização (opcional).
-//
-// Consultem o exemplo JSON fornecido anteriormente para a estrutura detalhada de `act_data`.
-```
-<markdown>
-Depois de guardar este ficheiro `app.js` na mesma pasta que o `index.html`, o próximo grande passo será configurar o seu projeto Firebase e popular o Firestore com os dados do Ato 1, conforme a estrutura detalhada nos comentários do `app.js` e no exemplo JSON que forneci anteriormente.
-
-Quando tiver tudo configurado, pode tentar abrir o `index.html` no seu navegador para testar! Se encontrar algum problema ou tiver dúvidas, diga-me.
-</markdown>
