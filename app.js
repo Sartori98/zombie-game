@@ -1,8 +1,5 @@
-```javascript
 // --- Configuração do Firebase ---
-// !!! IMPORTANTE: SUBSTITUA ESTE BLOCO PELO SEU firebaseConfig REAL !!!
-// Obtenha o seu firebaseConfig no console do Firebase:
-// Configurações do Projeto > Seus apps > Configuração do SDK (selecione "CDN")
+// O seu firebaseConfig fornecido:
 const firebaseConfig = {
   apiKey: "AIzaSyCXsrrRfgsN3Y0uh_dWp8dxNK9s5Fxx1Bo",
   authDomain: "zombie-game-efb3e.firebaseapp.com",
@@ -11,7 +8,9 @@ const firebaseConfig = {
   messagingSenderId: "210412539983",
   appId: "1:210412539983:web:c800e02d20c28fe1ea1a3a"
 };
-// !!! FIM DO BLOCO A SUBSTITUIR !!!
+// NOTA: Verifiquei o formato do storageBucket. Normalmente é "projectId.appspot.com".
+// Se "zombie-game-efb3e.firebasestorage.app" for o correto para o seu projeto específico,
+// por favor, reajuste. Caso contrário, use "zombie-game-efb3e.appspot.com".
 
 
 // --- Constantes Globais ---
@@ -26,7 +25,7 @@ const GAME_COLLECTION_NAME = 'rpg_apocalipse_zumbi_shared';
 const GAME_DOC_ID = 'partida_lucas_lavinia';
 
 // Caminho completo para o documento do jogo no Firestore.
-const firestoreGameDocPath = `/artifacts/rpg-zumbi-default-app/public/doc_para_public/data/doc_para_data/rpg_apocalipse_zumbi_shared/partida_lucas_lavinia}`;
+const firestoreGameDocPath = `/artifacts/${appId}/public/data/${GAME_COLLECTION_NAME}/${GAME_DOC_ID}`;
 
 // --- Inicialização do Firebase ---
 let app;
@@ -87,9 +86,9 @@ function clearError() {
 
 async function initializeAppAndAuth() {
     try {
-        // Verifica se firebaseConfig foi preenchido
-        if (!firebaseConfig || !firebaseConfig.apiKey || firebaseConfig.apiKey === "COLE_AQUI_SUA_API_KEY") {
-            throw new Error("Configuração do Firebase (firebaseConfig) não foi preenchida ou é inválida. Verifique o app.js.");
+        // Verifica se firebaseConfig foi preenchido e tem apiKey
+        if (!firebaseConfig || !firebaseConfig.apiKey) {
+            throw new Error("Configuração do Firebase (firebaseConfig) é inválida ou apiKey está em falta. Verifique o app.js.");
         }
         app = firebase.initializeApp(firebaseConfig);
         auth = firebase.auth();
@@ -107,15 +106,15 @@ async function initializeAppAndAuth() {
                 console.log("Utilizador autenticado:", userId);
                 listenToGameState();
             } else {
-                userId = "anon_" + crypto.randomUUID().substring(0,12); // ID anónimo temporário
+                userId = "anon_" + crypto.randomUUID().substring(0,12);
                 if(authStatusElement) authStatusElement.textContent = "A tentar login anónimo...";
                 if(userIdTextElement) userIdTextElement.textContent = `Anónimo (${userId.substring(5,10)}...)`;
                 if(userIdDisplayElement) userIdDisplayElement.classList.remove('hidden');
                 console.log("Nenhum utilizador. Tentando login anónimo. ID provisório:", userId);
                 try {
                     const anonUserCredential = await auth.signInAnonymously();
-                    // onAuthStateChanged será chamado novamente com o utilizador anónimo real
                     console.log("Login anónimo bem-sucedido:", anonUserCredential.user.uid);
+                    // onAuthStateChanged será chamado novamente com o utilizador anónimo real
                 } catch (error) {
                     console.error("Erro no login anónimo:", error);
                     displayError(`Erro no login anónimo: ${error.message}. Verifique as regras de segurança e se a autenticação anónima está ativa no Firebase.`);
@@ -123,10 +122,6 @@ async function initializeAppAndAuth() {
                 }
             }
         });
-
-        // Não é necessário chamar signInWithCustomToken ou signInAnonymously aqui explicitamente
-        // se o onAuthStateChanged já lida com a lógica de "nenhum utilizador".
-        // A menos que __initial_auth_token seja um requisito específico da plataforma.
 
     } catch (error) {
         console.error("Erro ao inicializar Firebase:", error);
@@ -140,16 +135,17 @@ function listenToGameState() {
         displayError("Base de dados não inicializada.");
         return;
     }
-    // userId deve ser definido pelo onAuthStateChanged antes desta função ser chamada com sucesso.
-    if (!userId && !auth.currentUser) {
+    if (!auth.currentUser && !userId.startsWith("anon_")) { // Ajuste para permitir ID anónimo provisório
         displayError("Utilizador não autenticado. A aguardar autenticação.");
         return;
     }
-    // Garante que userId é o uid do utilizador autenticado, se houver
-    if (auth.currentUser && userId !== auth.currentUser.uid) {
-        userId = auth.currentUser.uid;
-         if(userIdTextElement) userIdTextElement.textContent = userId.substring(0, 8) + "...";
+    
+    let currentUserIdToCheck = auth.currentUser ? auth.currentUser.uid : userId;
+    if (auth.currentUser && currentUserIdToCheck !== auth.currentUser.uid) { // Garante que userId é o uid do utilizador autenticado
+        currentUserIdToCheck = auth.currentUser.uid;
+        if(userIdTextElement) userIdTextElement.textContent = currentUserIdToCheck.substring(0, 8) + "...";
     }
+
 
     showLoading("A carregar dados do jogo do Firestore...");
     const gameDocRef = db.doc(firestoreGameDocPath);
@@ -196,7 +192,6 @@ function listenToGameState() {
             } else {
                 if(chosenFeedbackElement) chosenFeedbackElement.textContent = 'O jogo começou! Façam a vossa primeira escolha.';
             }
-            // hideLoading() é chamado dentro de displayScene
 
         } else {
             displayError(`Documento do jogo não encontrado em: ${firestoreGameDocPath}. Verifique se o caminho está correto e se o documento existe, contendo os campos 'act_data' e 'currentSceneId'.`);
@@ -229,14 +224,14 @@ function displayScene(sceneId) {
 
     if (scene.finalDoAto) {
         const endMessage = document.createElement('p');
-        endMessage.className = "text-center text-xl font-semibold my-4"; // Tailwind classes
+        endMessage.className = "text-center text-xl font-semibold my-4";
         endMessage.textContent = scene.gameOver ? "Fim de Jogo!" : "Fim do Ato!";
         if(choicesAreaElement) choicesAreaElement.appendChild(endMessage);
         
         if (scene.gameOver || scene.finalDoAto) {
             const restartButton = document.createElement('button');
             restartButton.textContent = "Reiniciar Ato";
-            restartButton.className = "choice-button w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-75 mt-4"; // Tailwind classes
+            restartButton.className = "choice-button w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-75 mt-4";
             restartButton.onclick = () => resetToActStart();
             if(choicesAreaElement) choicesAreaElement.appendChild(restartButton);
         }
@@ -246,7 +241,7 @@ function displayScene(sceneId) {
             if (choice && typeof choice.texto === 'string' && typeof choice.proximaCenaId === 'string') {
                 const button = document.createElement('button');
                 button.textContent = choice.texto;
-                button.className = "choice-button w-full bg-red-500 hover:bg-red-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-opacity-75"; // Tailwind classes
+                button.className = "choice-button w-full bg-red-500 hover:bg-red-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-opacity-75";
                 button.onclick = () => selectChoice(choice);
                 if(choicesAreaElement) choicesAreaElement.appendChild(button);
             } else {
@@ -264,8 +259,8 @@ async function selectChoice(choice) {
         displayError("Base de dados não inicializada.");
         return;
     }
-    let currentUserId = auth.currentUser ? auth.currentUser.uid : userId; // Garante que temos o ID mais atualizado
-    if (!currentUserId) {
+    let currentUserIdToLog = auth.currentUser ? auth.currentUser.uid : userId; // Usa o userId do estado se currentUser for null
+    if (!currentUserIdToLog) { // Adiciona verificação se currentUserIdToLog ainda é null
         displayError("Utilizador não autenticado. Não é possível registar a escolha.");
         return;
     }
@@ -275,7 +270,7 @@ async function selectChoice(choice) {
         return;
     }
 
-    console.log(`Utilizador ${currentUserId} escolheu: "${choice.texto}", indo para cena: ${choice.proximaCenaId}`);
+    console.log(`Utilizador ${currentUserIdToLog} escolheu: "${choice.texto}", indo para cena: ${choice.proximaCenaId}`);
     showLoading(`A processar escolha...`);
 
     const gameDocRef = db.doc(firestoreGameDocPath);
@@ -283,11 +278,10 @@ async function selectChoice(choice) {
         await gameDocRef.update({
             currentSceneId: choice.proximaCenaId,
             lastChoiceText: choice.texto,
-            lastChosenByUserId: currentUserId,
+            lastChosenByUserId: currentUserIdToLog,
             lastUpdateTimestamp: firebase.firestore.FieldValue.serverTimestamp()
         });
         console.log("Escolha e próxima cena atualizadas no Firestore.");
-        // O onSnapshot tratará de atualizar a UI com a nova cena.
     } catch (error) {
         console.error("Erro ao atualizar Firestore com a escolha: ", error);
         displayError(`Erro ao registar escolha: ${error.message}`);
@@ -304,7 +298,7 @@ async function resetToActStart() {
         displayError("Não foi possível reiniciar: dados do ato ou cena inicial não definidos.");
         return;
     }
-    let currentUserId = auth.currentUser ? auth.currentUser.uid : userId;
+    let currentUserIdToLog = auth.currentUser ? auth.currentUser.uid : userId;
 
     showLoading("A reiniciar o ato...");
     const gameDocRef = db.doc(firestoreGameDocPath);
@@ -312,7 +306,7 @@ async function resetToActStart() {
         await gameDocRef.update({
             currentSceneId: currentActData.cenaInicialId,
             lastChoiceText: "Ato reiniciado.",
-            lastChosenByUserId: currentUserId || "Sistema",
+            lastChosenByUserId: currentUserIdToLog || "Sistema",
             lastUpdateTimestamp: firebase.firestore.FieldValue.serverTimestamp()
         });
         console.log("Ato reiniciado para a cena:", currentActData.cenaInicialId);
@@ -325,10 +319,8 @@ async function resetToActStart() {
 
 // --- Inicialização da Aplicação ---
 document.addEventListener('DOMContentLoaded', () => {
-    // Verifica se os elementos HTML essenciais existem
     if (!storyTextElement || !choicesAreaElement || !loadingIndicator || !gameContent) {
         console.error("Um ou mais elementos HTML essenciais não foram encontrados no DOM. Verifique os IDs no index.html.");
-        // Poderia mostrar um erro visual para o utilizador aqui, se apropriado
         const body = document.querySelector('body');
         if (body) {
             body.innerHTML = '<p style="color:red; text-align:center; margin-top: 50px;">Erro crítico: Elementos da página não encontrados. Verifique o HTML.</p>';
@@ -336,15 +328,14 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
     }
 
-    // Verifica se o SDK do Firebase está carregado
     if (typeof firebase === 'undefined' || typeof firebase.initializeApp === 'undefined') {
         displayError("SDK do Firebase não carregado corretamente. Verifique os links <script> no index.html.");
         if(loadingIndicator) loadingIndicator.classList.add('hidden');
-        if(gameContent && !gameContent.querySelector('p.text-red-500')) { // Evita duplicar msg de erro
+        if(gameContent && !gameContent.querySelector('p.text-red-500')) {
              const errorP = document.createElement('p');
-             errorP.className = "text-red-500 text-center"; // Tailwind classes
+             errorP.className = "text-red-500 text-center";
              errorP.textContent = "Erro crítico: Firebase SDK não carregado.";
-             gameContent.innerHTML = ''; // Limpa conteúdo anterior
+             gameContent.innerHTML = '';
              gameContent.appendChild(errorP);
              gameContent.classList.remove('hidden');
         }
