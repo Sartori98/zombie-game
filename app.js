@@ -4,17 +4,18 @@ const firebaseConfig = {
   apiKey: "AIzaSyCXsrrRfgsN3Y0uh_dWp8dxNK9s5Fxx1Bo",
   authDomain: "zombie-game-efb3e.firebaseapp.com",
   projectId: "zombie-game-efb3e",
-  storageBucket: "zombie-game-efb3e.firebasestorage.app", // Mantido como forneceu. Verifique se este é o valor exato do seu console Firebase. O formato comum é "seu-projeto-id.appspot.com".
+  storageBucket: "zombie-game-efb3e.firebasestorage.app",
   messagingSenderId: "210412539983",
   appId: "1:210412539983:web:c800e02d20c28fe1ea1a3a"
 };
 
-
 // --- Constantes Globais ---
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'rpg-zumbi-default-app';
-const GAME_COLLECTION_NAME = 'rpg_apocalipse_zumbi_shared';
-const GAME_DOC_ID = 'partida_lucas_lavinia';
-const firestoreGameDocPath = `/artifacts/${appId}/public/data/${GAME_COLLECTION_NAME}/${GAME_DOC_ID}`;
+const GAME_COLLECTION_NAME = 'rpg_apocalipse_zumbi_shared'; // Este é o nome da última coleção antes do documento do jogo
+const GAME_DOC_ID = 'partida_lucas_lavinia'; // Este é o ID do documento final do jogo
+
+// Caminho completo para o documento do jogo no Firestore, AJUSTADO à sua estrutura:
+const firestoreGameDocPath = `/artifacts/${appId}/public/doc_para_public/data/doc_para_data/${GAME_COLLECTION_NAME}/${GAME_DOC_ID}`;
 
 // --- Inicialização do Firebase ---
 let app;
@@ -81,10 +82,7 @@ async function initializeAppAndAuth() {
         app = firebase.initializeApp(firebaseConfig);
         auth = firebase.auth();
         db = firebase.firestore();
-        // A linha abaixo foi removida pois estava a causar o erro:
-        // firebase.firestore().setLogLevel('error'); 
-        // Se precisar de ajustar níveis de log do Firebase globalmente, seria firebase.setLogLevel('warn' | 'error' | 'silent') ANTES de initializeApp.
-        // Mas para o Firestore especificamente, o controlo de log é mais complexo e esta linha não é necessária para funcionar.
+        // Linha de setLogLevel removida
 
         if(authStatusElement) authStatusElement.textContent = "A autenticar...";
 
@@ -114,8 +112,8 @@ async function initializeAppAndAuth() {
         });
 
     } catch (error) {
-        console.error("Erro ao inicializar Firebase:", error); // Este log já existe
-        displayError(`Erro crítico na inicialização: ${error.message}.`); // Este é o que aparece na UI
+        console.error("Erro ao inicializar Firebase:", error);
+        displayError(`Erro crítico na inicialização: ${error.message}.`);
         if(authStatusElement) authStatusElement.textContent = "Erro de Inicialização";
     }
 }
@@ -137,6 +135,7 @@ function listenToGameState() {
     }
 
     showLoading("A carregar dados do jogo do Firestore...");
+    console.log("A tentar aceder ao Firestore em:", firestoreGameDocPath); // Log para depuração do caminho
     const gameDocRef = db.doc(firestoreGameDocPath);
 
     gameDocRef.onSnapshot((doc) => {
