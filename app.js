@@ -4,36 +4,25 @@ const firebaseConfig = {
   apiKey: "AIzaSyCXsrrRfgsN3Y0uh_dWp8dxNK9s5Fxx1Bo",
   authDomain: "zombie-game-efb3e.firebaseapp.com",
   projectId: "zombie-game-efb3e",
-  storageBucket: "zombie-game-efb3e.firebasestorage.app",
+  storageBucket: "zombie-game-efb3e.firebasestorage.app", // Mantido como forneceu. Verifique se este é o valor exato do seu console Firebase. O formato comum é "seu-projeto-id.appspot.com".
   messagingSenderId: "210412539983",
   appId: "1:210412539983:web:c800e02d20c28fe1ea1a3a"
 };
-// NOTA: Verifiquei o formato do storageBucket. Normalmente é "projectId.appspot.com".
-// Se "zombie-game-efb3e.firebasestorage.app" for o correto para o seu projeto específico,
-// por favor, reajuste. Caso contrário, use "zombie-game-efb3e.appspot.com".
 
 
 // --- Constantes Globais ---
-// O __app_id é fornecido por alguns ambientes de execução (como o Canvas do Gemini).
-// Se não estiver definido, usamos um valor padrão. Este valor DEVE corresponder
-// ao ID do documento que criou dentro da coleção "artifacts" no Firestore.
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'rpg-zumbi-default-app';
-
-// Nomes da coleção e do documento no Firestore.
-// Estes DEVEM corresponder exatamente aos nomes que usou no seu banco de dados Firestore.
 const GAME_COLLECTION_NAME = 'rpg_apocalipse_zumbi_shared';
 const GAME_DOC_ID = 'partida_lucas_lavinia';
-
-// Caminho completo para o documento do jogo no Firestore.
 const firestoreGameDocPath = `/artifacts/${appId}/public/data/${GAME_COLLECTION_NAME}/${GAME_DOC_ID}`;
 
 // --- Inicialização do Firebase ---
 let app;
 let auth;
 let db;
-let userId = null; // Será definido após a autenticação
+let userId = null;
 
-// --- Elementos da UI (IDs DEVEM corresponder aos do index.html) ---
+// --- Elementos da UI ---
 const storyTextElement = document.getElementById('story-text');
 const choicesAreaElement = document.getElementById('choices-area');
 const chosenFeedbackElement = document.getElementById('chosen-feedback');
@@ -45,8 +34,8 @@ const userIdDisplayElement = document.getElementById('user-id-display');
 const errorMessageElement = document.getElementById('error-message');
 
 // --- Estado do Jogo Local ---
-let currentActData = null; // Armazenará os dados do ato carregado do Firestore
-let currentSceneId = null; // ID da cena atual que está sendo exibida
+let currentActData = null;
+let currentSceneId = null;
 
 // --- Funções Auxiliares de UI ---
 function showLoading(message = "A carregar...") {
@@ -86,14 +75,16 @@ function clearError() {
 
 async function initializeAppAndAuth() {
     try {
-        // Verifica se firebaseConfig foi preenchido e tem apiKey
         if (!firebaseConfig || !firebaseConfig.apiKey) {
             throw new Error("Configuração do Firebase (firebaseConfig) é inválida ou apiKey está em falta. Verifique o app.js.");
         }
         app = firebase.initializeApp(firebaseConfig);
         auth = firebase.auth();
         db = firebase.firestore();
-        firebase.firestore().setLogLevel('error'); // 'debug' para mais logs, 'error' para menos
+        // A linha abaixo foi removida pois estava a causar o erro:
+        // firebase.firestore().setLogLevel('error'); 
+        // Se precisar de ajustar níveis de log do Firebase globalmente, seria firebase.setLogLevel('warn' | 'error' | 'silent') ANTES de initializeApp.
+        // Mas para o Firestore especificamente, o controlo de log é mais complexo e esta linha não é necessária para funcionar.
 
         if(authStatusElement) authStatusElement.textContent = "A autenticar...";
 
@@ -114,7 +105,6 @@ async function initializeAppAndAuth() {
                 try {
                     const anonUserCredential = await auth.signInAnonymously();
                     console.log("Login anónimo bem-sucedido:", anonUserCredential.user.uid);
-                    // onAuthStateChanged será chamado novamente com o utilizador anónimo real
                 } catch (error) {
                     console.error("Erro no login anónimo:", error);
                     displayError(`Erro no login anónimo: ${error.message}. Verifique as regras de segurança e se a autenticação anónima está ativa no Firebase.`);
@@ -124,8 +114,8 @@ async function initializeAppAndAuth() {
         });
 
     } catch (error) {
-        console.error("Erro ao inicializar Firebase:", error);
-        displayError(`Erro crítico na inicialização: ${error.message}.`);
+        console.error("Erro ao inicializar Firebase:", error); // Este log já existe
+        displayError(`Erro crítico na inicialização: ${error.message}.`); // Este é o que aparece na UI
         if(authStatusElement) authStatusElement.textContent = "Erro de Inicialização";
     }
 }
@@ -135,17 +125,16 @@ function listenToGameState() {
         displayError("Base de dados não inicializada.");
         return;
     }
-    if (!auth.currentUser && !userId.startsWith("anon_")) { // Ajuste para permitir ID anónimo provisório
+    if (!auth.currentUser && !userId.startsWith("anon_")) {
         displayError("Utilizador não autenticado. A aguardar autenticação.");
         return;
     }
     
     let currentUserIdToCheck = auth.currentUser ? auth.currentUser.uid : userId;
-    if (auth.currentUser && currentUserIdToCheck !== auth.currentUser.uid) { // Garante que userId é o uid do utilizador autenticado
+    if (auth.currentUser && currentUserIdToCheck !== auth.currentUser.uid) {
         currentUserIdToCheck = auth.currentUser.uid;
         if(userIdTextElement) userIdTextElement.textContent = currentUserIdToCheck.substring(0, 8) + "...";
     }
-
 
     showLoading("A carregar dados do jogo do Firestore...");
     const gameDocRef = db.doc(firestoreGameDocPath);
@@ -259,8 +248,8 @@ async function selectChoice(choice) {
         displayError("Base de dados não inicializada.");
         return;
     }
-    let currentUserIdToLog = auth.currentUser ? auth.currentUser.uid : userId; // Usa o userId do estado se currentUser for null
-    if (!currentUserIdToLog) { // Adiciona verificação se currentUserIdToLog ainda é null
+    let currentUserIdToLog = auth.currentUser ? auth.currentUser.uid : userId;
+    if (!currentUserIdToLog) {
         displayError("Utilizador não autenticado. Não é possível registar a escolha.");
         return;
     }
